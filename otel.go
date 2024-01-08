@@ -71,7 +71,7 @@ func setupOTelSDK(ctx context.Context, serviceName, serviceVersion string) (shut
 	// probably connect directly to the service through dns.
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, "localhost:30080",
+	conn, err := grpc.DialContext(ctx, "otel-collector.default:4317",
 		// Note the use of insecure transport here. TLS is recommended in production.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
