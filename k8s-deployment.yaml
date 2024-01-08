@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: otel-go-example
-        image: gcr.io/cco-in-context-test/github.com/draffensperger/otel-go-example:latest
+        image: us-central1-docker.pkg.dev/cco-in-context-test/otel-go-example/main:latest
         ports:
         - containerPort: 8080
           name: "http"
