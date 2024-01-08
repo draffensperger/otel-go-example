@@ -4,4 +4,4 @@ steps:
 - images: ['us-central1-docker.pkg.dev/$PROJECT_ID/otel-go-example/main:latest']
 options:
   sourceProvenanceHash: ['SHA256']
-requestedVerifyOption: VERIFIED
+  requestedVerifyOption: VERIFIED
