@@ -1,2 +1,2 @@
-# otel_go_dice
+# OTel Go Example
 OpenTelemetry Go Dice Example
