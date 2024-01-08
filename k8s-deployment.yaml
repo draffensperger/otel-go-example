@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-go-example-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-go-example
+  template:
+    metadata:
+      labels:
+        app: otel-go-example
+    spec:
+      containers:
+      - name: otel-go-example
+        image: gcr.io/cco-in-context-test/github.com/draffensperger/otel-go-example
+        ports:
+        - containerPort: 8080
+          name: "http"
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /rolldice
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 60
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
