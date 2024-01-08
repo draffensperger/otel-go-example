@@ -17,10 +17,16 @@ package main
 import (
 	"context"
 	"errors"
+  "fmt"
 	"time"
+
+  "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+  "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+  "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -58,12 +64,28 @@ func setupOTelSDK(ctx context.Context, serviceName, serviceVersion string) (shut
 		return
 	}
 
+  // If the OpenTelemetry Collector is running on a local cluster (minikube or
+	// microk8s), it should be accessible through the NodePort service at the
+	// `localhost:30080` endpoint. Otherwise, replace `localhost` with the
+	// endpoint of your cluster. If you run the app inside k8s, then you can
+	// probably connect directly to the service through dns.
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, "localhost:30080",
+		// Note the use of insecure transport here. TLS is recommended in production.
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+  if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+	}
+
 	// Set up propagator.
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
 	// Set up trace provider.
-	tracerProvider, err := newTraceProvider(res)
+	tracerProvider, err := newTraceProvider(ctx, res, conn)
 	if err != nil {
 		handleErr(err)
 		return
@@ -72,7 +94,7 @@ func setupOTelSDK(ctx context.Context, serviceName, serviceVersion string) (shut
 	otel.SetTracerProvider(tracerProvider)
 
 	// Set up meter provider.
-	meterProvider, err := newMeterProvider(res)
+	meterProvider, err := newMeterProvider(ctx, res, conn)
 	if err != nil {
 		handleErr(err)
 		return
@@ -98,7 +120,13 @@ func newPropagator() propagation.TextMapPropagator {
 	)
 }
 
-func newTraceProvider(res *resource.Resource) (*trace.TracerProvider, error) {
+func newTraceProvider(ctx context.Context, res *resource.Resource, conn *grpc.ClientConn) (*trace.TracerProvider, error) {
+  otlpExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+  bsp := trace.NewBatchSpanProcessor(otlpExporter)
+
 	traceExporter, err := stdouttrace.New(
 		stdouttrace.WithPrettyPrint())
 	if err != nil {
@@ -109,12 +137,18 @@ func newTraceProvider(res *resource.Resource) (*trace.TracerProvider, error) {
 		trace.WithBatcher(traceExporter,
 			// Default is 5s. Set to 1s for demonstrative purposes.
 			trace.WithBatchTimeout(time.Second)),
+    trace.WithSpanProcessor(bsp),
 		trace.WithResource(res),
 	)
 	return traceProvider, nil
 }
 
-func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
+func newMeterProvider(ctx context.Context, res *resource.Resource, conn *grpc.ClientConn) (*metric.MeterProvider, error) {
+  otlpExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+	}
+
 	metricExporter, err := stdoutmetric.New()
 	if err != nil {
 		return nil, err
@@ -125,6 +159,7 @@ func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
 			// Default is 1m. Set to 3s for demonstrative purposes.
 			metric.WithInterval(3*time.Second))),
+		metric.WithReader(metric.NewPeriodicReader(otlpExporter)),
 	)
 	return meterProvider, nil
 }
