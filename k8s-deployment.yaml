@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: otel-go-example
-        image: us-central1-docker.pkg.dev/cco-in-context-test/otel-go-example/main:latest
+        image: us-central1-docker.pkg.dev/cco-in-context-test/otel-go-example/main@sha256:9e80ce67e15c456b8890c8b67aed32bcfe727e55df0e3c0faf8eb6ab58fa3927
         ports:
         - containerPort: 8080
           name: "http"
